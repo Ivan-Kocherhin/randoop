@@ -2,11 +2,18 @@ package randoop.execution;
 
 import static randoop.execution.RunCommand.CommandException;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.Attributes;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
+
 import randoop.main.GenInputsAbstract;
 
 /** Provides the environment for running JUnit tests. */
@@ -107,10 +114,32 @@ public class TestEnvironment {
     }
 
     command.add("-classpath");
-    command.add("." + java.io.File.pathSeparator + testClasspath);
+    Manifest manifest = new Manifest();
+    manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+    manifest.getMainAttributes().put(Attributes.Name.CLASS_PATH, classPathToManifest(testClasspath));
+    try {
+      File temp = File.createTempFile("TestClasspath", ".jar");
+      JarOutputStream jar = new JarOutputStream(new FileOutputStream(temp), manifest);
+      jar.close();
+      command.add("." + java.io.File.pathSeparator + temp.getAbsolutePath());
+    } catch (IOException e) {
+      System.out.println("Cannot create temporary file with classpath manifest, using usual classpath instead");
+      command.add("." + java.io.File.pathSeparator + testClasspath);
+    }
     command.add("org.junit.runner.JUnitCore");
 
     return command;
+  }
+
+  private Object classPathToManifest(String testClasspath) {
+    StringBuilder manifestClassPath = new StringBuilder();
+    for (String s: testClasspath.split(File.pathSeparator)) {
+      manifestClassPath
+          .append("file:/")
+          .append(s.replace("\\", "/"))
+          .append(s.endsWith(".jar") ? " " : "/ ");
+    }
+    return manifestClassPath.toString().trim();
   }
 
   private String getJavaagentOption(Path agentPath, String args) {
